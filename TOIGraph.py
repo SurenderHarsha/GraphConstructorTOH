@@ -4,13 +4,14 @@ Created on Fri Jan 27 16:33:16 2023
 
 @author: Surender Harsha
 """
-from typing import List
+from typing import List,Dict
 import copy
 import networkx
+from networkx.algorithms import bipartite
 
 #States
 class GameState:
-    tower_state : dict = None
+    tower_state : Dict = None
     
 #Moves
 class Moves:
@@ -37,7 +38,6 @@ class TOH:
         self.n_disks = n_disks
         self.n_towers = n_towers
         self.disks = list(range(1,n_disks+1))
-        self.towers = {x:[] for x in range(1, n_towers+1)}
         
     def check_validity(self, towers: dict):
         
@@ -46,37 +46,36 @@ class TOH:
         
         if list(towers.keys()) != list(range(1,self.n_towers+1)):
             return False
+           
         disk_list = self.disks.copy()
+        
         for t in towers:
             l = towers[t]
             prev = -1
-            for o  in l:
+            
+            
+            for disk in l:
                 try:
-                    disk_list.remove(o)
+                    disk_list.remove(disk)
                 except:
                     return False
     
-                if prev > o:
+                if prev > disk:
                     return False
-                prev = o
+                prev = disk
+        
         if len(disk_list) > 0:
             return False
         
         return True
-        
-    
-    def set_tower_state(self, d: dict):
-        if self.check_validity(d):
-            self.towers = d
-        else:
-            raise Exception("Check tower state before setting it! Invalid state provided!")
             
-    def get_possible_states(self, game_state: GameState):
+    def get_possible_states(self, game_state: GameState) -> Vertex:
         possible_edges = []
         
         
         tower_state = game_state.tower_state
         copy_ts = copy.deepcopy(tower_state)
+        
         for i in copy_ts:
             other_towers = list(copy_ts.keys())
             other_towers.remove(i)
@@ -103,12 +102,45 @@ class TOH:
         v.all_edges = possible_edges
         return v
     
+class Metrics:
+    def __init__(self, GC):
+        self.GC = GC
+        try:
+            if GC.route:
+                pass
+        except:
+            raise Exception("Your graph constructor did not calculate the shortest route yet!")
+    
+    def route_length(self):
+        return len(self.GC.route) - 1
+    
+    def adjacency_matrix(self):
+        self.adj_mat = networkx.adjacency_matrix(self.GC.G)
+        return self.adj_mat
+    
+    def incidence_matrix(self):
+        self.inc_mat = networkx.incidence_matrix(self.GC.G)
+        return self.inc_mat
+    
+    def eigenvector_centrality(self):
+        self.eigen_cent = networkx.eigenvector_centrality(self.GC.G)
+        self.eigen_cent = {k: v for k, v in sorted(self.eigen_cent.items(), key=lambda item: item[1])[::-1]}
+        
+        return self.eigen_cent
+    
+    def is_eulerian(self):
+        self.is_eul = networkx.is_eulerian(self.GC.G)
+        return self.is_eul
+        
+
 class GraphConstructor:
     
     def __init__(self, toh : TOH):
         self.toh = toh
-        self.populated_states = []
+        
         self.G = networkx.Graph()
+        
+        self.populated_states = []
         self.populated_edges = {}
         self.node_idx = []
         
@@ -123,11 +155,13 @@ class GraphConstructor:
             self.final_state = final_state
         else:
             raise Exception("Check tower state before setting it! Invalid state provided!")
+    
     def check_possibility(self):
         if self.final_state.tower_state in self.populated_states:
             return True
         else:
             return False
+    
     def populate_nodes(self):
         idx = 0
         population_stack = [self.init_state]
@@ -139,9 +173,11 @@ class GraphConstructor:
             self.node_idx.append(idx)
             v = self.toh.get_possible_states(state)
             self.G.add_node(v,label=idx)
+            #bipartite_switch ^= 1 
             idx+=1
             for e in v.all_edges:
                 population_stack.append(e.to_state)
+    
     def search_vertex(self, game_state: GameState):
         for n in self.G.nodes:
             if n.init_state.tower_state == game_state.tower_state:
@@ -179,23 +215,27 @@ class GraphConstructor:
         for i in self.route:
             path.append(self.populated_states[i])
         return path
-    def draw_shortest_route(self):
+    def draw_shortest_route(self, font_s):
         route = self.get_shortest_route()
         node_size = []
         color_map = []
+        #top_nodes = []
         width = []
         for i in self.node_idx:
             if i ==  self.i_idx:
                 color_map.append('yellow')
                 node_size.append(120)
+                #top_nodes.append(i)
                 continue
             if i == self.f_idx:
                 color_map.append('cyan')
                 node_size.append(120)
+                #top_nodes.append(i)
                 continue
             if i in route:
                 node_size.append(120)
                 color_map.append('pink')
+                #top_nodes.append(i)
                 continue
             color_map.append('grey')
             node_size.append(10)
@@ -205,8 +245,7 @@ class GraphConstructor:
             else:
                 width.append(0.1)
         self.G = networkx.convert_node_labels_to_integers(self.G)
-        networkx.draw_kamada_kawai(self.G,width = width,node_color = color_map,node_size=node_size,font_size = 1, with_labels=True)
-        #networkx.draw_circular(self.G,width = width,node_color = color_map,node_size=node_size,font_size = 1, with_labels=True)
-    
+        networkx.draw_kamada_kawai(self.G,width = width,node_color = color_map,node_size=node_size,font_size = font_s, with_labels=True)
+        
         
 
